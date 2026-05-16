@@ -1,0 +1,41 @@
+# worker_v1-example-reddit-engager-worker — docker-compose for the
+# Reddit engager example.
+#
+# Pulls the agent code (CLAUDE.md + specialists/reddit.js) from the
+# sibling repo via REPO_URL in .env:
+#   https://github.com/clawborrator/worker_v1-example-reddit-engager-repo
+#
+# Runs as a SINGLE long-lived worker (no fan-out children). Every
+# 4 hours, cron fires inside the agent's Claude Code session — one
+# cycle scrolls the personal home feed, picks a post, reads its
+# comments, replies to a select few via Playwright, and notifies
+# @clauderemote with the activity report.
+#
+#   1. Drop your Reddit cookies into ./secrets/reddit.cookies.json
+#      (see README for capture instructions)
+#   2. Fill in .env (copy from .env.example)
+#   3. docker compose up -d
+#   4. docker compose logs -f          # watch the loop
+#   5. docker compose down             # stop + remove
+#
+# Image is ladder99/clawborrator-worker-playwright:latest — the
+# Playwright extension of the base worker_v1 image. No local build
+# required; the image is pulled from Docker Hub.
+
+services:
+  engager:
+    image:          ladder99/clawborrator-worker-playwright:latest
+    container_name: reddit-engager
+    env_file:       .env
+    # Chromium uses /dev/shm heavily; default 64MB is not enough.
+    # 2GB matches Playwright's docs for stable headless runs.
+    shm_size:       2gb
+    volumes:
+      # Reddit session cookies — read-only. The Playwright wrapper
+      # at specialists/reddit.js loads these via
+      # context.addCookies() so it never has to navigate the login
+      # form (which would trigger captcha / 2FA / new-device email).
+      - ./secrets/reddit.cookies.json:/secrets/reddit.cookies.json:ro
+    stdin_open: true
+    tty:        true
+    restart:    unless-stopped
